@@ -6,317 +6,353 @@
 <title>Dowser</title>
 <style>
   :root {
-    --bg: #0b0d0c;
-    --panel: #121614;
-    --line: rgba(255,255,255,.08);
-    --ink: #e8ece8;
-    --dim: rgba(232,236,232,.58);
-    --faint: rgba(232,236,232,.34);
-    /* The console's own green, desaturated far enough to sit under text. */
-    --accent: #9bbc5a;
-    --accent-dim: rgba(155,188,90,.14);
-    --warn: #d98a4b;
-    --mono: ui-monospace, "SF Mono", Menlo, monospace;
-    --ui: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+    --bg: #0b0d0c; --panel: #121614; --raise: #1b201d;
+    --line: rgba(255,255,255,.08); --line-strong: rgba(255,255,255,.18);
+    --ink: #e8ece8; --dim: rgba(232,236,232,.6); --faint: rgba(232,236,232,.36);
+    --accent: #9bbc5a; --accent-dim: rgba(155,188,90,.14); --warn: #d98a4b;
+    --mono: ui-monospace,"SF Mono",Menlo,monospace;
+    --ui: -apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif;
   }
   * { box-sizing: border-box; }
-  body {
-    margin: 0; background: var(--bg); color: var(--ink);
-    font-family: var(--ui); font-size: 15px; line-height: 1.5;
-    -webkit-font-smoothing: antialiased;
-  }
-  .wrap { max-width: 860px; margin: 0 auto; padding: 26px 20px 60px; }
+  body { margin:0; background:var(--bg); color:var(--ink); font-family:var(--ui);
+         font-size:15px; line-height:1.5; -webkit-font-smoothing:antialiased; }
+  .wrap { max-width:760px; margin:0 auto; padding:26px 20px 80px; }
+  header { display:flex; align-items:baseline; gap:11px; }
+  h1 { font-size:20px; font-weight:600; letter-spacing:-.02em; margin:0; }
+  .sub { color:var(--faint); font-size:13px; }
+  .status { display:flex; align-items:center; gap:8px; margin:12px 0 24px;
+            font-size:13px; color:var(--dim); }
+  .dot { width:8px; height:8px; border-radius:50%; background:var(--faint); flex:none; }
+  .dot.on { background:var(--accent); box-shadow:0 0 0 3px var(--accent-dim); }
+  .game { font-family:var(--mono); color:var(--ink); }
 
-  header { display: flex; align-items: baseline; gap: 12px; margin-bottom: 4px; }
-  h1 { font-size: 21px; font-weight: 600; letter-spacing: -.02em; margin: 0; }
-  .sub { color: var(--faint); font-size: 13px; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(228px,1fr)); gap:11px; }
+  .card { background:var(--panel); border:.5px solid var(--line); border-radius:12px;
+          padding:15px 16px; text-align:left; cursor:pointer; font:inherit; color:inherit;
+          transition:border-color .15s ease, background .15s ease, transform .15s ease; }
+  .card:hover { border-color:var(--line-strong); background:#171b19; transform:translateY(-1px); }
+  .card b { display:block; font-size:15px; font-weight:600; margin-bottom:3px; }
+  .card span { color:var(--faint); font-size:12.5px; line-height:1.45; display:block; }
 
-  .status {
-    display: flex; align-items: center; gap: 8px; margin: 14px 0 22px;
-    font-size: 13px; color: var(--dim);
-  }
-  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--faint); flex: none; }
-  .dot.on { background: var(--accent); box-shadow: 0 0 0 3px var(--accent-dim); }
-  .game { font-family: var(--mono); color: var(--ink); }
+  .panel { background:var(--panel); border:.5px solid var(--line); border-radius:12px;
+           padding:20px; margin-bottom:13px; }
+  .eyebrow { font-size:11px; text-transform:uppercase; letter-spacing:.1em;
+             color:var(--faint); font-weight:600; margin:0 0 12px; }
+  .prompt { font-size:19px; font-weight:500; letter-spacing:-.01em; margin:0 0 6px; }
+  .hint { color:var(--faint); font-size:13px; margin:0 0 16px; }
 
-  .panel {
-    background: var(--panel); border: .5px solid var(--line);
-    border-radius: 12px; padding: 18px; margin-bottom: 14px;
-  }
-  .panel h2 {
-    font-size: 11px; text-transform: uppercase; letter-spacing: .1em;
-    color: var(--faint); margin: 0 0 14px; font-weight: 600;
-  }
+  .row { display:flex; gap:9px; flex-wrap:wrap; align-items:center; }
+  input[type=text], input[type=number] {
+    background:#0a0c0b; border:.5px solid var(--line); color:var(--ink);
+    border-radius:9px; padding:11px 13px; font-size:16px; font-family:var(--mono); width:190px; }
+  input:focus-visible, button:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+  button { background:var(--raise); border:.5px solid var(--line); color:var(--ink);
+           border-radius:9px; padding:10px 15px; font-size:14px; font-family:inherit;
+           cursor:pointer; transition:background .15s ease,border-color .15s ease; }
+  button:hover:not(:disabled) { background:#232925; border-color:var(--line-strong); }
+  button:disabled { opacity:.35; cursor:not-allowed; }
+  .primary { background:var(--accent-dim); border-color:rgba(155,188,90,.4); color:var(--accent); }
+  .primary:hover:not(:disabled) { background:rgba(155,188,90,.22); }
+  .ghost { background:none; border-color:transparent; color:var(--dim); padding-left:0; }
+  .ghost:hover:not(:disabled) { background:none; color:var(--ink); border-color:transparent; }
+  .warnbtn { color:var(--warn); border-color:rgba(217,138,75,.34); }
 
-  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
-  .row + .row { margin-top: 10px; }
+  /* Picker */
+  .picker { position:relative; width:230px; }
+  .options { position:absolute; z-index:20; top:calc(100% + 5px); left:0; right:0;
+             max-height:266px; overflow-y:auto; background:#0f1211;
+             border:.5px solid var(--line-strong); border-radius:10px; padding:4px;
+             box-shadow:0 18px 40px -12px rgba(0,0,0,.85); }
+  .options.hidden { display:none; }
+  .option { display:flex; justify-content:space-between; gap:10px; width:100%;
+            background:none; border:none; border-radius:7px; padding:8px 10px;
+            font-size:14px; text-align:left; }
+  .option:hover, .option.on { background:var(--accent-dim); }
+  .option i { font-style:normal; font-family:var(--mono); color:var(--faint); font-size:12.5px; }
 
-  input[type=number] {
-    background: #0a0c0b; border: .5px solid var(--line); color: var(--ink);
-    border-radius: 9px; padding: 10px 12px; font-family: var(--mono);
-    font-size: 16px; width: 108px; -moz-appearance: textfield;
-  }
-  input[type=number]::-webkit-outer-spin-button,
-  input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
-  input:focus-visible, button:focus-visible {
-    outline: 2px solid var(--accent); outline-offset: 2px;
-  }
+  .steps { display:flex; gap:5px; margin-bottom:14px; }
+  .pip { height:3px; flex:1; border-radius:2px; background:var(--line); }
+  .pip.done { background:var(--accent); }
 
-  button {
-    background: #1b201d; border: .5px solid var(--line); color: var(--ink);
-    border-radius: 9px; padding: 9px 14px; font-size: 14px; font-family: inherit;
-    cursor: pointer; transition: background .15s ease, border-color .15s ease;
-  }
-  button:hover:not(:disabled) { background: #232925; border-color: rgba(255,255,255,.18); }
-  button:disabled { opacity: .38; cursor: not-allowed; }
-  button.primary { background: var(--accent-dim); border-color: rgba(155,188,90,.4); color: var(--accent); }
-  button.primary:hover:not(:disabled) { background: rgba(155,188,90,.22); }
-  button.warn { color: var(--warn); border-color: rgba(217,138,75,.34); }
-  button.tiny { padding: 5px 10px; font-size: 12px; }
+  .count { display:flex; align-items:baseline; gap:10px; margin:16px 0 0; }
+  .count b { font-family:var(--mono); font-size:30px; font-weight:600;
+             font-variant-numeric:tabular-nums; letter-spacing:-.02em; }
+  .count span { color:var(--faint); font-size:13px; }
+  .count.solved b { color:var(--accent); }
 
-  .count { display: flex; align-items: baseline; gap: 10px; margin-bottom: 4px; }
-  .count b {
-    font-family: var(--mono); font-size: 34px; font-weight: 600;
-    letter-spacing: -.02em; font-variant-numeric: tabular-nums;
-  }
-  .count span { color: var(--faint); font-size: 13px; }
-  .count.solved b { color: var(--accent); }
+  table { width:100%; border-collapse:collapse; margin-top:12px; }
+  th { text-align:left; font-size:10px; text-transform:uppercase; letter-spacing:.09em;
+       color:var(--faint); font-weight:600; padding:0 10px 7px 0; }
+  td { padding:7px 10px 7px 0; border-top:.5px solid var(--line); font-size:14px; }
+  td.addr, td.val { font-family:var(--mono); font-variant-numeric:tabular-nums; }
+  td.val { color:var(--accent); }
+  td.where { color:var(--dim); font-family:var(--mono); font-size:12.5px; }
+  td.act { text-align:right; padding-right:0; }
+  tr.frozen td.addr::after { content:"held"; margin-left:8px; font-family:var(--ui);
+    font-size:10px; text-transform:uppercase; letter-spacing:.08em; color:var(--warn); }
 
-  table { width: 100%; border-collapse: collapse; margin-top: 12px; }
-  th {
-    text-align: left; font-size: 10px; text-transform: uppercase;
-    letter-spacing: .09em; color: var(--faint); font-weight: 600;
-    padding: 0 10px 8px 0;
-  }
-  td { padding: 7px 10px 7px 0; border-top: .5px solid var(--line); font-size: 14px; }
-  td.addr { font-family: var(--mono); font-variant-numeric: tabular-nums; }
-  td.where { color: var(--dim); font-family: var(--mono); font-size: 13px; }
-  td.val { font-family: var(--mono); font-variant-numeric: tabular-nums; color: var(--accent); }
-  td.act { text-align: right; padding-right: 0; }
-  tr.frozen td.addr::after {
-    content: "held"; margin-left: 9px; font-family: var(--ui); font-size: 10px;
-    text-transform: uppercase; letter-spacing: .08em; color: var(--warn);
-  }
-
-  ol { margin: 0; padding-left: 20px; color: var(--dim); font-size: 13.5px; }
-  ol li { margin: 3px 0; }
-  ol b { color: var(--ink); font-weight: 500; }
-  ol .n { font-family: var(--mono); font-variant-numeric: tabular-nums; }
-
-  .hint { color: var(--faint); font-size: 12.5px; margin-top: 12px; }
-  .msg {
-    margin-top: 12px; font-size: 13px; color: var(--warn);
-    min-height: 1.4em;
-  }
-  .scroll { overflow-x: auto; }
+  .note { border-left:2px solid var(--line-strong); padding:2px 0 2px 13px;
+          color:var(--dim); font-size:13.5px; margin:14px 0 0; }
+  .note.caution { border-color:var(--warn); }
+  .msg { margin-top:13px; font-size:13px; color:var(--warn); min-height:1.3em; }
+  .scroll { overflow-x:auto; }
+  .hidden { display:none; }
 </style>
 </head>
 <body>
 <div class="wrap">
 
-  <header>
-    <h1>Dowser</h1>
-    <span class="sub">find the address behind a number</span>
-  </header>
-
+  <header><h1>Dowser</h1><span class="sub">cheat search for Pokémon Gold, Silver &amp; Crystal</span></header>
   <div class="status">
-    <span class="dot" id="dot"></span>
-    <span id="conn">looking for Cartridge…</span>
+    <span class="dot" id="dot"></span><span id="conn">looking for Cartridge…</span>
     <span class="game" id="title"></span>
   </div>
 
-  <div class="panel">
-    <h2>The value is</h2>
-    <div class="row">
-      <input type="number" id="value" placeholder="47" min="0" />
-      <button class="primary" data-f="equals" data-v>now this</button>
-      <button data-f="less-than" data-v>less than this</button>
-      <button data-f="greater-than" data-v>more than this</button>
-      <button data-f="not-equals" data-v>not this</button>
-    </div>
-    <div class="row">
-      <button data-f="decreased" id="b-dec">it went down</button>
-      <button data-f="increased">it went up</button>
-      <button data-f="changed">it changed</button>
-      <button data-f="unchanged">it didn't change</button>
-    </div>
-    <div class="row">
-      <input type="number" id="delta" placeholder="12" min="0" />
-      <button data-f="decreased-by" data-d>down by this</button>
-      <button data-f="increased-by" data-d>up by this</button>
-      <span style="flex:1"></span>
-      <button id="reset">Start over</button>
-    </div>
-    <div class="msg" id="msg"></div>
+  <!-- Pick a cheat -->
+  <div id="menu">
+    <p class="eyebrow">What do you want to change?</p>
+    <div class="grid" id="cards"></div>
   </div>
 
-  <div class="panel">
-    <h2>Candidates</h2>
-    <div class="count" id="count"><b>—</b><span>nothing searched yet</span></div>
-    <div id="list"></div>
-    <div class="row" id="freezeRow" style="margin-top:14px; display:none">
-      <input type="number" id="freezeValue" placeholder="151" min="0" />
-      <button class="primary" id="freezeAll">Hold all at this</button>
-      <button class="warn" id="thaw">Release</button>
+  <!-- Run one -->
+  <div id="run" class="hidden">
+    <button class="ghost" id="back">‹ All cheats</button>
+
+    <div class="panel">
+      <div class="steps" id="pips"></div>
+      <p class="eyebrow" id="stepLabel"></p>
+      <p class="prompt" id="prompt"></p>
+      <p class="hint" id="hint"></p>
+
+      <div class="row" id="answerRow">
+        <div class="picker hidden" id="picker">
+          <input type="text" id="pick" placeholder="type a name…" autocomplete="off" />
+          <div class="options hidden" id="options"></div>
+        </div>
+        <input type="number" id="num" class="hidden" placeholder="0" />
+        <button class="primary" id="go">Next</button>
+        <button id="skip" class="hidden">That's enough</button>
+      </div>
+
+      <div class="count hidden" id="count"><b></b><span></span></div>
+      <p class="note hidden" id="caution"></p>
+      <div class="msg" id="msg"></div>
     </div>
-    <div class="hint" id="hint"></div>
-  </div>
 
-  <div class="panel" id="historyPanel" style="display:none">
-    <h2>Rounds</h2>
-    <ol id="history"></ol>
+    <!-- Apply -->
+    <div class="panel hidden" id="apply">
+      <p class="eyebrow">Set it to</p>
+      <div class="row">
+        <div class="picker hidden" id="picker2">
+          <input type="text" id="pick2" placeholder="type a name…" autocomplete="off" />
+          <div class="options hidden" id="options2"></div>
+        </div>
+        <input type="number" id="num2" class="hidden" placeholder="0" />
+        <button class="primary" id="hold">Hold it there</button>
+        <button class="warnbtn" id="release">Release</button>
+      </div>
+      <p class="note hidden" id="applyHint"></p>
+      <div id="list"></div>
+    </div>
   </div>
-
 </div>
 
 <script>
 "use strict";
-
 const $ = (id) => document.getElementById(id);
-let state = { remaining: 0, started: false, candidates: [], frozen: [], history: [] };
-
-const say = (text, bad = true) => {
-  const el = $("msg");
-  el.textContent = text || "";
-  el.style.color = bad ? "var(--warn)" : "var(--faint)";
-};
+let S = {};             // last server state
+let recipes = [];
+let pending = null;     // number chosen in a picker
 
 async function call(path, body) {
-  const options = body
+  const options = body !== undefined
     ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }
     : {};
-  const response = await fetch(path, options);
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data.detail || `${response.status}`);
+  const r = await fetch(path, options);
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data.detail || `error ${r.status}`);
   return data;
 }
+const say = (t) => { $("msg").textContent = t || ""; };
 
-function render(next) {
-  if (next) state = Object.assign(state, next);
+/* ---- name picker: type "pid", click Pidgey ---- */
+function wirePicker(inputId, boxId, onPick) {
+  const input = $(inputId), box = $(boxId);
+  let kind = "species", items = [], cursor = 0;
 
-  if ("connected" in state) {
-    $("dot").classList.toggle("on", !!state.connected);
-    $("conn").textContent = state.connected ? "connected to" : "Cartridge isn't listening";
-    $("title").textContent = state.connected ? (state.title || "") : "";
-    if (!state.connected) {
-      $("title").textContent = "";
-      $("conn").textContent = "Cartridge isn't listening — turn on Settings › Advanced › Cheat Search";
-    }
-  }
+  const draw = () => {
+    box.innerHTML = items.map((it, i) =>
+      `<button class="option ${i === cursor ? "on" : ""}" data-n="${it.number}">
+         <span>${it.name}</span><i>${it.number}</i></button>`).join("");
+    box.classList.toggle("hidden", items.length === 0);
+  };
 
-  // Relative filters need something to compare against.
-  document.querySelectorAll("button[data-f]").forEach((b) => {
-    const relative = ["decreased","increased","changed","unchanged","decreased-by","increased-by"]
-      .includes(b.dataset.f);
-    b.disabled = relative && !state.started;
+  const load = async () => {
+    const r = await fetch(`/api/names?kind=${kind}&q=${encodeURIComponent(input.value)}`);
+    items = (await r.json()).names; cursor = 0; draw();
+  };
+
+  const choose = (n) => {
+    const hit = items.find((it) => it.number === n) || items[cursor];
+    if (!hit) return;
+    input.value = `${hit.name}`;
+    onPick(hit.number);
+    items = []; draw();
+  };
+
+  input.addEventListener("input", () => { onPick(null); load(); });
+  input.addEventListener("focus", load);
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "ArrowDown") { cursor = Math.min(cursor + 1, items.length - 1); draw(); e.preventDefault(); }
+    else if (e.key === "ArrowUp") { cursor = Math.max(cursor - 1, 0); draw(); e.preventDefault(); }
+    else if (e.key === "Enter") { choose(); e.preventDefault(); }
+    else if (e.key === "Escape") { items = []; draw(); }
   });
+  box.addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-n]");
+    if (b) choose(parseInt(b.dataset.n, 10));
+  });
+  document.addEventListener("click", (e) => {
+    if (!input.parentElement.contains(e.target)) { items = []; draw(); }
+  });
+
+  return { setKind: (k) => { kind = k; input.value = ""; items = []; draw(); },
+           clear: () => { input.value = ""; items = []; draw(); } };
+}
+
+const picker1 = wirePicker("pick", "options", (n) => { pending = n; });
+let applyValue = null;
+const picker2 = wirePicker("pick2", "options2", (n) => { applyValue = n; });
+
+/* ---- menu ---- */
+async function loadMenu() {
+  recipes = (await (await fetch("/api/recipes")).json()).recipes;
+  $("cards").innerHTML = recipes.map((r) =>
+    `<button class="card" data-id="${r.id}"><b>${r.name}</b><span>${r.blurb}</span></button>`).join("");
+}
+$("cards").addEventListener("click", async (e) => {
+  const card = e.target.closest("button[data-id]");
+  if (!card) return;
+  try { render(await call(`/api/recipes/${card.dataset.id}/start`, {})); }
+  catch (err) { say(err.message); }
+});
+$("back").addEventListener("click", () => { S.recipe = null; render(S); });
+
+/* ---- running a recipe ---- */
+$("go").addEventListener("click", async () => {
+  const step = S.recipe && S.recipe.step;
+  if (!step) return;
+  let value = null;
+  if (step.answer === "number") {
+    value = parseInt($("num").value, 10);
+    if (Number.isNaN(value)) return say("Type the number you can see.");
+  } else if (step.answer !== "none") {
+    value = pending;
+    if (value === null) return say("Pick one from the list.");
+  }
+  try {
+    say("");
+    render(await call("/api/recipes/step", { value }));
+    $("num").value = ""; pending = null; picker1.clear();
+  } catch (err) { say(err.message); }
+});
+$("skip").addEventListener("click", async () => {
+  try { render(await call("/api/recipes/skip", {})); } catch (err) { say(err.message); }
+});
+
+/* ---- applying ---- */
+async function hold(address) {
+  const applies = S.recipe.applies;
+  let value = applies === "number" ? parseInt($("num2").value, 10) : applyValue;
+  if (value === null || Number.isNaN(value)) return say("Choose what to set it to.");
+  if (value > S.recipe.maximum) return say(`That's more than this can hold (max ${S.recipe.maximum}).`);
+  try { say(""); render(await call("/api/freeze", { value, address })); }
+  catch (err) { say(err.message); }
+}
+$("hold").addEventListener("click", () => hold(null));
+$("release").addEventListener("click", async () => {
+  try { render(await call("/api/thaw", {})); } catch (err) { say(err.message); }
+});
+$("list").addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-hold]");
+  if (b) hold(parseInt(b.dataset.hold, 10));
+});
+
+/* ---- render ---- */
+function render(next) {
+  if (next) S = Object.assign(S, next);
+
+  $("dot").classList.toggle("on", !!S.connected);
+  $("conn").textContent = S.connected ? "connected to"
+    : "Cartridge isn't listening — turn on Settings › Advanced › Cheat Search";
+  $("title").textContent = S.connected ? (S.title || "") : "";
+
+  const r = S.recipe;
+  $("menu").classList.toggle("hidden", !!r);
+  $("run").classList.toggle("hidden", !r);
+  if (!r) return;
+
+  $("pips").innerHTML = Array.from({ length: r.stepCount }, (_, i) =>
+    `<span class="pip ${i < r.stepNumber - 1 || r.done ? "done" : ""}"></span>`).join("");
+
+  const answering = !r.done && r.step;
+  $("answerRow").classList.toggle("hidden", !answering);
+  $("stepLabel").textContent = r.done ? r.name
+    : `${r.name} · step ${r.stepNumber} of ${r.stepCount}`;
+  $("prompt").textContent = r.done ? "Found it." : r.step.prompt;
+  $("hint").textContent = r.done ? "" : (r.step.hint || "");
+
+  if (answering) {
+    const wantsName = r.step.answer === "species" || r.step.answer === "item";
+    $("picker").classList.toggle("hidden", !wantsName);
+    $("num").classList.toggle("hidden", r.step.answer !== "number");
+    if (wantsName) picker1.setKind(r.step.answer);
+    $("skip").classList.toggle("hidden", !(S.started && S.remaining > 0 && S.remaining <= 40));
+  }
 
   const count = $("count");
-  const solved = state.started && state.remaining === 1;
-  count.classList.toggle("solved", solved);
-  count.innerHTML = state.started
-    ? `<b>${state.remaining.toLocaleString()}</b><span>${
-        state.remaining === 1 ? "found it" : "addresses still possible"}</span>`
-    : `<b>—</b><span>nothing searched yet</span>`;
-
-  const frozen = new Set(state.frozen.map((f) => f.address));
-  const list = $("list");
-
-  if (!state.started || state.remaining === 0) {
-    list.innerHTML = "";
-  } else if (state.candidates.length === 0) {
-    list.innerHTML = "";
-    $("hint").textContent = "Too many to show. Give it another round.";
-  } else {
-    list.innerHTML = `<div class="scroll"><table>
-      <thead><tr><th>Address</th><th>Where</th><th>Value</th><th></th></tr></thead>
-      <tbody>${state.candidates.map((c) => `
-        <tr class="${frozen.has(c.address) ? "frozen" : ""}">
-          <td class="addr">$${c.hex}</td>
-          <td class="where">${c.label}</td>
-          <td class="val">${c.value}</td>
-          <td class="act"><button class="tiny" data-hold="${c.address}">Hold</button></td>
-        </tr>`).join("")}</tbody></table></div>`;
-    $("hint").textContent = state.candidates.length > 1
-      ? "Several addresses can hold the same value. Hold them all, see if the game changes, then halve the list."
-      : "";
+  count.classList.toggle("hidden", !S.started);
+  count.classList.toggle("solved", S.remaining === 1);
+  if (S.started) {
+    count.querySelector("b").textContent = S.remaining.toLocaleString();
+    count.querySelector("span").textContent =
+      S.remaining === 1 ? "address found" :
+      S.remaining === 0 ? "nothing matched — start over and check the number" :
+      "possible addresses";
   }
 
-  $("freezeRow").style.display =
-    state.started && state.remaining > 0 && state.remaining <= 8 ? "flex" : "none";
+  $("caution").classList.toggle("hidden", !r.caution);
+  $("caution").className = "note caution" + (r.caution ? "" : " hidden");
+  $("caution").textContent = r.caution || "";
 
-  $("historyPanel").style.display = state.history.length ? "block" : "none";
-  $("history").innerHTML = state.history
-    .map((r) => `<li><b>${r.filter}</b> — <span class="n">${r.remaining.toLocaleString()}</span> left</li>`)
-    .join("");
-}
+  // Applying is offered once the set is small enough to be worth trying.
+  const ready = S.started && S.remaining > 0 && S.remaining <= 8;
+  $("apply").classList.toggle("hidden", !ready);
+  if (ready) {
+    const named = r.applies === "species" || r.applies === "item";
+    $("picker2").classList.toggle("hidden", !named);
+    $("num2").classList.toggle("hidden", named);
+    if (named && picker2._kind !== r.applies) { picker2.setKind(r.applies); picker2._kind = r.applies; }
+    $("applyHint").classList.toggle("hidden", !r.applyHint);
+    $("applyHint").textContent = r.applyHint || "";
 
-async function scan(filter, value) {
-  say("");
-  try {
-    render(await call("/api/scan", { filter, value }));
-  } catch (error) {
-    say(error.message);
+    const frozen = new Set((S.frozen || []).map((f) => f.address));
+    $("list").innerHTML = `<div class="scroll"><table>
+      <thead><tr><th>Address</th><th>Where</th><th>Now</th><th></th></tr></thead><tbody>
+      ${(S.candidates || []).map((c) => `<tr class="${frozen.has(c.address) ? "frozen" : ""}">
+        <td class="addr">$${c.hex}</td><td class="where">${c.label}</td>
+        <td class="val">${c.value}</td>
+        <td class="act"><button data-hold="${c.address}">Only this one</button></td>
+      </tr>`).join("")}</tbody></table></div>`;
   }
 }
-
-document.querySelectorAll("button[data-f]").forEach((button) => {
-  button.addEventListener("click", () => {
-    const filter = button.dataset.f;
-    let value = null;
-    if ("v" in button.dataset) {
-      value = parseInt($("value").value, 10);
-      if (Number.isNaN(value)) return say("Type the number you can see first.");
-    }
-    if ("d" in button.dataset) {
-      value = parseInt($("delta").value, 10);
-      if (Number.isNaN(value)) return say("Type how much it moved by.");
-    }
-    scan(filter, value);
-  });
-});
-
-// Return in the value box is the commonest action, so it does the commonest thing.
-$("value").addEventListener("keydown", (event) => {
-  if (event.key === "Enter") scan("equals", parseInt($("value").value, 10));
-});
-
-$("reset").addEventListener("click", async () => {
-  render(await call("/api/session", { width: 8 }));
-  say("");
-});
-
-$("list").addEventListener("click", async (event) => {
-  const button = event.target.closest("button[data-hold]");
-  if (!button) return;
-  const value = parseInt($("freezeValue").value, 10);
-  if (Number.isNaN(value)) return say("Put a value in the box first.");
-  try {
-    render(await call("/api/freeze", { value, address: parseInt(button.dataset.hold, 10) }));
-    say("");
-  } catch (error) { say(error.message); }
-});
-
-$("freezeAll").addEventListener("click", async () => {
-  const value = parseInt($("freezeValue").value, 10);
-  if (Number.isNaN(value)) return say("Put a value in the box first.");
-  try {
-    render(await call("/api/freeze", { value }));
-    say("");
-  } catch (error) { say(error.message); }
-});
-
-$("thaw").addEventListener("click", async () => {
-  try { render(await call("/api/thaw", {})); say(""); }
-  catch (error) { say(error.message); }
-});
 
 async function poll() {
   try { render(await call("/api/status")); } catch { /* server restarting */ }
 }
+loadMenu();
 poll();
-setInterval(poll, 2500);
-render();
+setInterval(poll, 3000);
 </script>
 </body>
 </html>

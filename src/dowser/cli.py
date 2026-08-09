@@ -22,6 +22,7 @@ import numpy as np
 
 from . import codes, scan
 from .snapshot import NotASaveState, load
+from .widths import WIDTHS
 
 DEFAULT_SESSION = Path(".dowser-session.npz")
 
@@ -44,7 +45,7 @@ FILTERS: dict[str, tuple] = {
 def _save(path: Path, session: scan.ScanSession, last_state: Path) -> None:
     np.savez(
         path,
-        width=session.width,
+        width=str(session.width),
         indices=session._indices if session._indices is not None else np.array([], dtype=np.int64),
         started=session.started,
         history=np.array([f"{r.filter_name}\t{r.remaining}" for r in session.history]),
@@ -57,7 +58,7 @@ def _restore(path: Path) -> tuple[scan.ScanSession, Path | None]:
         raise SystemExit(f"no session at {path}. Run `dowser new` first.")
 
     stored = np.load(path, allow_pickle=False)
-    session = scan.ScanSession(width=int(stored["width"]))
+    session = scan.ScanSession(width=str(stored["width"]))
 
     if bool(stored["started"]):
         session._indices = stored["indices"]
@@ -395,7 +396,7 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     new = subparsers.add_parser("new", help="start a search, discarding any in progress")
-    new.add_argument("--width", type=int, choices=(8, 16), default=8)
+    new.add_argument("--width", choices=sorted(WIDTHS), default="u8")
     new.set_defaults(func=cmd_new)
 
     scan_parser = subparsers.add_parser("scan", help="apply one filter to a save state")
@@ -413,7 +414,7 @@ def build_parser() -> argparse.ArgumentParser:
     history.set_defaults(func=cmd_history)
 
     live = subparsers.add_parser("live", help="search a running emulator, one keystroke a round")
-    live.add_argument("--width", type=int, choices=(8, 16), default=8)
+    live.add_argument("--width", choices=sorted(WIDTHS), default="u8")
     live.add_argument("--host", default="127.0.0.1")
     live.add_argument("--port", type=int, default=8484)
     live.add_argument("--limit", type=int, default=50)
@@ -428,7 +429,7 @@ def build_parser() -> argparse.ArgumentParser:
     code = subparsers.add_parser("code", help="write a code for an address")
     code.add_argument("address", help="hex, with or without $ or 0x")
     code.add_argument("value", type=int)
-    code.add_argument("--width", type=int, choices=(8, 16), default=8)
+    code.add_argument("--width", type=int, choices=(8, 16), default=8)  # code bytes, not a reading
     code.add_argument("--bank", type=int, default=0)
     code.set_defaults(func=cmd_code)
 

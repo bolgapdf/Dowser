@@ -16,6 +16,9 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from .widths import Width, decode, resolve
+from .widths import valid as width_valid
+
 # Where each region lives in the CPU's address space.
 SRAM_BASE = 0xA000
 WRAM_BANK0_BASE = 0xC000
@@ -74,40 +77,40 @@ class AddressSpace:
             [np.full(r.data.size, i, dtype=np.int32) for i, r in enumerate(regions)]
         )
 
-        # A 16-bit value is two adjacent bytes, but only if they're adjacent in
-        # the console's address space too. Without this, the last byte of work
-        # RAM bank 3 and the first of bank 4 would read as a 16-bit number that
-        # no game could ever have written.
-        self.pair_ok = np.zeros(self.values.size, dtype=bool)
-        offset = 0
-        for region in regions:
-            if region.data.size >= 2:
-                self.pair_ok[offset : offset + region.data.size - 1] = True
-            offset += region.data.size
-
     def __len__(self) -> int:
         return int(self.values.size)
 
-    def read(self, width: int) -> np.ndarray:
-        """The scannable values at every index, as 8- or 16-bit numbers.
+    def read(self, width: str | int) -> np.ndarray:
+        """Every index read as a number of this width.
 
-        For 16-bit the result is little-endian, which is the byte order the
-        SM83 uses and therefore the order games store counters in. Indices where
-        a pair would straddle two regions are present but meaningless; callers
-        mask them with `pair_ok`.
+        Indices where the value would run off the end of its region are present
+        but meaningless; callers mask them with `valid`.
         """
-        if width == 8:
-            return self.values.astype(np.uint16)
-        if width == 16:
-            low = self.values.astype(np.uint16)
-            high = np.zeros_like(low)
-            high[:-1] = self.values[1:]
-            return low | (high << 8)
-        raise ValueError(f"width must be 8 or 16, got {width}")
+        return decode(self.values, resolve(width))
 
-    def valid(self, width: int) -> np.ndarray:
-        """Indices that can hold a value of this width."""
-        return self.pair_ok if width == 16 else np.ones(self.values.size, dtype=bool)
+    def valid(self, width: str | int) -> np.ndarray:
+        """Indices that can hold a value of this width, and hold a sane one."""
+        resolved: Width = resolve(width)
+        return self._room(resolved.size) & width_valid(self.values, resolved)
+
+    def _room(self, size: int) -> np.ndarray:
+        """Indices with `size` bytes left inside their own region.
+
+        Regions are only adjacent in this array, never in the console: the last
+        byte of work RAM bank 3 and the first of bank 4 are neighbours here and
+        nowhere else, and reading across that seam invents numbers no game
+        wrote.
+        """
+        if size == 1:
+            return np.ones(self.values.size, dtype=bool)
+
+        room = np.zeros(self.values.size, dtype=bool)
+        offset = 0
+        for region in self.regions:
+            if region.data.size >= size:
+                room[offset : offset + region.data.size - (size - 1)] = True
+            offset += region.data.size
+        return room
 
     def describe(self, index: int) -> str:
         region = self.regions[int(self.region_ids[index])]

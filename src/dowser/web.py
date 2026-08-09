@@ -20,8 +20,9 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
-from . import scan
+from . import gen2, recipes, scan
 from .live import Live, NotConnected
+from .widths import WIDTHS, resolve
 
 STATIC = Path(__file__).parent / "static"
 
@@ -63,8 +64,11 @@ class Search:
     def __init__(self, host: str = "127.0.0.1", port: int = 8484) -> None:
         self.host = host
         self.port = port
-        self.session = scan.ScanSession(width=8)
+        self.session = scan.ScanSession(width="u8")
         self.frozen: list[dict] = []
+        #: The guided search in progress, if any.
+        self.recipe: recipes.Recipe | None = None
+        self.step = 0
 
     def connection(self) -> Live:
         """A fresh connection per request.
@@ -77,8 +81,10 @@ class Search:
         except NotConnected as error:
             raise HTTPException(status_code=503, detail=str(error)) from error
 
-    def reset(self, width: int) -> None:
+    def reset(self, width: str) -> None:
         self.session = scan.ScanSession(width=width)
+        self.recipe = None
+        self.step = 0
 
 
 search = Search()
@@ -86,13 +92,18 @@ app = FastAPI(title="Dowser", docs_url=None, redoc_url=None)
 
 
 class NewSearch(BaseModel):
-    width: int = Field(8, description="8 or 16")
+    width: str = Field("u8", description="a key from /api/widths")
 
 
 class ScanRequest(BaseModel):
     filter: str
     value: int | None = None
     second: int | None = None
+
+
+class RecipeStep(BaseModel):
+    #: Absent for steps that need no answer ("press this after you spend some").
+    value: int | None = None
 
 
 class FreezeRequest(BaseModel):
@@ -115,8 +126,37 @@ def _candidates(limit: int = 200) -> list[dict]:
     ]
 
 
+def _recipe_state() -> dict | None:
+    if search.recipe is None:
+        return None
+
+    recipe = search.recipe
+    done = search.step >= len(recipe.steps)
+    return {
+        "id": recipe.id,
+        "name": recipe.name,
+        "blurb": recipe.blurb,
+        "applies": recipe.applies,
+        "applyHint": recipe.apply_hint,
+        "caution": recipe.caution,
+        "width": recipe.width,
+        "maximum": resolve(recipe.width).maximum,
+        "stepNumber": search.step + 1,
+        "stepCount": len(recipe.steps),
+        "done": done,
+        "step": None
+        if done
+        else {
+            "prompt": recipe.steps[search.step].prompt,
+            "answer": recipe.steps[search.step].answer,
+            "hint": recipe.steps[search.step].hint,
+        },
+    }
+
+
 def _state(extra: dict | None = None) -> dict:
     payload = {
+        "recipe": _recipe_state(),
         "width": search.session.width,
         "started": search.session.started,
         "remaining": search.session.remaining,
@@ -141,6 +181,130 @@ def status() -> dict:
         return _state({"connected": False, "title": None})
 
 
+@app.get("/api/recipes")
+def list_recipes() -> dict:
+    return {
+        "recipes": [
+            {
+                "id": r.id,
+                "name": r.name,
+                "blurb": r.blurb,
+                "tags": r.tags,
+                "steps": len(r.steps),
+                "caution": r.caution,
+            }
+            for r in recipes.RECIPES
+        ]
+    }
+
+
+@app.post("/api/recipes/{recipe_id}/start")
+def start_recipe(recipe_id: str) -> dict:
+    recipe = recipes.BY_ID.get(recipe_id)
+    if recipe is None:
+        raise HTTPException(status_code=404, detail=f"no recipe {recipe_id!r}")
+
+    search.reset(recipe.width)
+    search.recipe = recipe
+    search.step = 0
+    return _state()
+
+
+@app.post("/api/recipes/step")
+def run_step(body: RecipeStep) -> dict:
+    if search.recipe is None:
+        raise HTTPException(status_code=400, detail="no guided search in progress")
+    if search.step >= len(search.recipe.steps):
+        raise HTTPException(status_code=400, detail="this search is already finished")
+
+    step = search.recipe.steps[search.step]
+    factory, arity = recipes.ASK[step.filter]
+    if arity and body.value is None:
+        raise HTTPException(status_code=400, detail="that step needs a number")
+
+    live = search.connection()
+    try:
+        space = live.address_space()
+    finally:
+        live.close()
+
+    try:
+        search.session.scan(space, factory(body.value) if arity else factory())
+    except scan.NeedsPrevious as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+    search.step += 1
+    return _state()
+
+
+@app.post("/api/recipes/skip")
+def skip_rest() -> dict:
+    """Stop early. Two rounds is often enough, and the third is a formality."""
+    if search.recipe is None:
+        raise HTTPException(status_code=400, detail="no guided search in progress")
+    if not search.session.started:
+        raise HTTPException(status_code=400, detail="do at least one step first")
+    search.step = len(search.recipe.steps)
+    return _state()
+
+
+@app.get("/api/names")
+def names(kind: str, q: str = "", limit: int = 40) -> dict:
+    """The picker's list: type `pid`, get Pidgey.
+
+    Ranked so that a prefix match beats a match in the middle, because typing
+    `mew` should not offer Mewtwo first.
+    """
+    table = gen2.SPECIES if kind == "species" else gen2.ITEMS if kind == "item" else None
+    if table is None:
+        raise HTTPException(status_code=400, detail="kind must be species or item")
+
+    notable = gen2.NOTABLE_SPECIES if kind == "species" else gen2.NOTABLE_ITEMS
+    query = q.strip().lower()
+
+    if not query:
+        chosen = [(n, table[n]) for n in notable if n in table]
+        chosen += [(n, name) for n, name in table.items() if n not in notable]
+    else:
+        matches = [(n, name) for n, name in table.items() if query in name.lower()]
+        # Exact, then prefix, then shortest. Without the length term, typing
+        # "mew" offers Mewtwo first, because it also starts with "mew" and has
+        # the lower number.
+        matches.sort(
+            key=lambda pair: (
+                pair[1].lower() != query,
+                not pair[1].lower().startswith(query),
+                len(pair[1]),
+                pair[0],
+            )
+        )
+        chosen = matches
+        if query.isdigit() and int(query) in table:
+            chosen.insert(0, (int(query), table[int(query)]))
+
+    return {
+        "names": [{"number": n, "name": name} for n, name in chosen[:limit]],
+        "total": len(table),
+    }
+
+
+@app.get("/api/widths")
+def widths() -> dict:
+    """How a number can be read. The page builds its own picker from this."""
+    return {
+        "widths": [
+            {
+                "key": w.key,
+                "label": w.label,
+                "bytes": w.size,
+                "maximum": w.maximum,
+                "description": w.description,
+            }
+            for w in WIDTHS.values()
+        ]
+    }
+
+
 @app.get("/api/filters")
 def filters() -> dict:
     return {
@@ -153,8 +317,10 @@ def filters() -> dict:
 
 @app.post("/api/session")
 def new_session(body: NewSearch) -> dict:
-    if body.width not in (8, 16):
-        raise HTTPException(status_code=400, detail="width must be 8 or 16")
+    try:
+        resolve(body.width)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
     search.reset(body.width)
     return _state()
 

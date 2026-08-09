@@ -19,6 +19,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from .memory import AddressSpace
+from .widths import resolve
 
 # A predicate receives the current values and the previous ones (or None on the
 # first pass) and returns a boolean mask over every index.
@@ -121,7 +122,7 @@ class Candidate:
     bank: int
     address: int
     value: int
-    width: int
+    width: str
 
     def __str__(self) -> str:
         where = self.region if self.region == "hram" else f"{self.region}:{self.bank}"
@@ -135,10 +136,9 @@ class ScanSession:
     so relative filters compare like with like.
     """
 
-    def __init__(self, width: int = 8) -> None:
-        if width not in (8, 16):
-            raise ValueError(f"width must be 8 or 16, got {width}")
-        self.width = width
+    def __init__(self, width: str | int = "u8") -> None:
+        # `resolve` raises on anything unknown, and accepts the old 8/16 form.
+        self.width = resolve(width).key
         self.history: list[Round] = []
         self._indices: np.ndarray | None = None
         self._previous: np.ndarray | None = None

@@ -42,7 +42,7 @@ def run(session, *argv) -> int:
 def test_a_whole_search(game, capsys):
     session = game["session"]
 
-    assert run(session, "new", "--width", "8") == 0
+    assert run(session, "new", "--width", "u8") == 0
     run(session, "scan", game["before"], "equals", "47")
     first = capsys.readouterr().out
     assert "candidates" in first

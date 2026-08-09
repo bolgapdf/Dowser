@@ -16,7 +16,7 @@ def client():
     """A client wired to a fake emulator, with the search reset between tests."""
     server = FakeCartridge()
     web.search.port = server.port
-    web.search.reset(8)
+    web.search.reset("u8")
     web.search.frozen = []
     with TestClient(web.app) as client:
         yield client, server
@@ -71,10 +71,10 @@ def test_missing_value(client):
     assert "needs 1 value" in response.json()["detail"]
 
 
-def test_width_must_be_eight_or_sixteen(client):
+def test_width_must_be_one_the_reader_knows(client):
     api, _ = client
-    assert api.post("/api/session", json={"width": 12}).status_code == 400
-    assert api.post("/api/session", json={"width": 16}).json()["width"] == 16
+    assert api.post("/api/session", json={"width": "u12"}).status_code == 400
+    assert api.post("/api/session", json={"width": "u16be"}).json()["width"] == "u16be"
 
 
 def test_freeze_requires_a_narrow_enough_set(client):
@@ -149,9 +149,9 @@ def test_sixteen_bit_search_finds_a_wide_value(client, tmp_path):
     wide = FakeCartridge(payload=state_bytes())
     web.search.port = wide.port
     try:
-        api.post("/api/session", json={"width": 16})
+        api.post("/api/session", json={"width": "u16le"})
         body = api.post("/api/scan", json={"filter": "greater-than", "value": 0}).json()
-        assert body["width"] == 16
+        assert body["width"] == "u16le"
         assert body["remaining"] > 0
     finally:
         wide.close()
