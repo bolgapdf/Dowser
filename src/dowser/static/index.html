@@ -135,6 +135,9 @@
       </div>
 
       <div class="count hidden" id="count"><b></b><span></span></div>
+      <p class="note caution hidden" id="stale">The console hasn't advanced a single frame since
+        the last step. Cartridge is paused or minimised — nothing found this way will mean
+        anything. Bring the game back up, press Start over, and try again.</p>
       <p class="note hidden" id="caution"></p>
       <div class="msg" id="msg"></div>
     </div>
@@ -236,7 +239,13 @@ $("cards").addEventListener("click", async (e) => {
   try { render(await call(`/api/recipes/${card.dataset.id}/start`, {})); }
   catch (err) { say(err.message); }
 });
-$("back").addEventListener("click", () => { S.recipe = null; render(S); });
+$("back").addEventListener("click", async () => {
+  // Locally first so the menu appears on the click, then tell the server. The
+  // poll treats /api/status as the truth, so without the call it would put the
+  // recipe straight back a few seconds later.
+  S.recipe = null; render(S);
+  try { render(await call("/api/recipes/exit", {})); } catch (err) { say(err.message); }
+});
 
 /* ---- running a recipe ---- */
 $("go").addEventListener("click", async () => {
@@ -283,8 +292,10 @@ function render(next) {
   if (next) S = Object.assign(S, next);
 
   $("dot").classList.toggle("on", !!S.connected);
-  $("conn").textContent = S.connected ? "connected to"
-    : "Cartridge isn't listening — turn on Settings › Advanced › Cheat Search";
+  $("conn").textContent = !S.connected
+    ? "Cartridge isn't listening — turn on Settings › Advanced › Cheat Search"
+    : S.running === false ? "connected, but the game is PAUSED —" : "connected to";
+  $("dot").classList.toggle("on", !!S.connected && S.running !== false);
   $("title").textContent = S.connected ? (S.title || "") : "";
 
   const r = S.recipe;
@@ -306,7 +317,13 @@ function render(next) {
     const wantsName = r.step.answer === "species" || r.step.answer === "item";
     $("picker").classList.toggle("hidden", !wantsName);
     $("num").classList.toggle("hidden", r.step.answer !== "number");
-    if (wantsName) picker1.setKind(r.step.answer);
+    // Only on an actual kind change. setKind clears the box, and render runs
+    // on every 3s poll, so calling it unconditionally ate whatever was typed
+    // between polls. Step-to-step clearing is handled by picker1.clear() in
+    // the Go handler.
+    if (wantsName && picker1._kind !== r.step.answer) {
+      picker1.setKind(r.step.answer); picker1._kind = r.step.answer;
+    }
     $("skip").classList.toggle("hidden", !(S.started && S.remaining > 0 && S.remaining <= 40));
   }
 
@@ -321,6 +338,7 @@ function render(next) {
       "possible addresses";
   }
 
+  $("stale").classList.toggle("hidden", !S.stale);
   $("caution").classList.toggle("hidden", !r.caution);
   $("caution").className = "note caution" + (r.caution ? "" : " hidden");
   $("caution").textContent = r.caution || "";

@@ -147,6 +147,18 @@ class Live:
             work_ram_bank=int(plist.get("workRAMBank", 1)),
         )
 
+    def running(self) -> bool | None:
+        """Whether the frame clock is ticking, or None on an older Cartridge.
+
+        A search against a paused console finds nothing and looks exactly like
+        a search against the wrong value, so it's worth asking outright.
+        """
+        self._send("RUNNING")
+        reply = self._read_line()
+        if reply.startswith("ERR"):
+            return None
+        return self._expect_ok(reply) == "1"
+
     def freeze(self, address: int, value: int, *, bank: int = 0) -> int:
         """Hold `address` at `value`, rewritten once per frame.
 

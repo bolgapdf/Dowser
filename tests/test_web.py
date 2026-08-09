@@ -155,3 +155,12 @@ def test_sixteen_bit_search_finds_a_wide_value(client, tmp_path):
         assert body["remaining"] > 0
     finally:
         wide.close()
+
+
+def test_status_reports_a_paused_console(client):
+    """A paused emulator is silently fatal to a search, so it must be visible."""
+    api, server = client
+    server.running = False
+    assert api.get("/api/status").json()["running"] is False
+    server.running = True
+    assert api.get("/api/status").json()["running"] is True

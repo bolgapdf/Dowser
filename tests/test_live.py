@@ -47,6 +47,7 @@ class FakeCartridge:
         self.payload = payload if payload is not None else state_bytes()
         self.title = title
         self.frozen: list[str] = []
+        self.running = True
         self.socket = socket.socket()
         self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.socket.bind(("127.0.0.1", 0))
@@ -95,6 +96,8 @@ class FakeCartridge:
                     elif command == "CLEAR":
                         self.frozen.clear()
                         connection.sendall(b"OK 0\n")
+                    elif command == "RUNNING":
+                        connection.sendall(f"OK {1 if self.running else 0}\n".encode())
                     elif command == "HELD":
                         connection.sendall(b"OK\n")
                     elif command == "BYE":

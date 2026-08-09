@@ -69,6 +69,9 @@ class Search:
         #: The guided search in progress, if any.
         self.recipe: recipes.Recipe | None = None
         self.step = 0
+        #: The bytes the last step measured, to notice a frozen emulator.
+        self.last_bytes = None
+        self.stale = False
 
     def connection(self) -> Live:
         """A fresh connection per request.
@@ -85,6 +88,8 @@ class Search:
         self.session = scan.ScanSession(width=width)
         self.recipe = None
         self.step = 0
+        self.last_bytes = None
+        self.stale = False
 
 
 search = Search()
@@ -157,6 +162,7 @@ def _recipe_state() -> dict | None:
 def _state(extra: dict | None = None) -> dict:
     payload = {
         "recipe": _recipe_state(),
+        "stale": search.stale,
         "width": search.session.width,
         "started": search.session.started,
         "remaining": search.session.remaining,
@@ -176,9 +182,10 @@ def status() -> dict:
     try:
         with Live(search.host, search.port, timeout=2.0) as live:
             title = live.title()
-        return _state({"connected": True, "title": title})
+            running = live.running()
+        return _state({"connected": True, "title": title, "running": running})
     except (NotConnected, HTTPException):
-        return _state({"connected": False, "title": None})
+        return _state({"connected": False, "title": None, "running": None})
 
 
 @app.get("/api/recipes")
@@ -228,12 +235,36 @@ def run_step(body: RecipeStep) -> dict:
     finally:
         live.close()
 
+    # A byte-for-byte identical snapshot means the console did not advance a
+    # single frame between two steps, which no running game does. Every filter
+    # still "works" against it and every answer it gives is meaningless, so say
+    # so rather than let the search quietly collapse to nothing.
+    import numpy as np
+
+    search.stale = search.last_bytes is not None and np.array_equal(space.values, search.last_bytes)
+    search.last_bytes = space.values.copy()
+
     try:
         search.session.scan(space, factory(body.value) if arity else factory())
     except scan.NeedsPrevious as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
 
     search.step += 1
+    return _state()
+
+
+@app.post("/api/recipes/exit")
+def exit_recipe() -> dict:
+    """Leave the guided search and go back to the menu.
+
+    The page polls /api/status every few seconds and takes it as authoritative,
+    so clearing the recipe in the browser alone lasts until the next poll puts
+    it straight back. The session is left alone: starting any recipe resets it
+    anyway, and leaving it here means going back to look at the menu doesn't
+    throw away a search in progress.
+    """
+    search.recipe = None
+    search.step = 0
     return _state()
 
 
