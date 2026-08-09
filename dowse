@@ -1,0 +1,13 @@
+#!/bin/sh
+#
+# Runs Dowser straight from the source tree.
+#
+# The editable install writes a .pth file that this venv does not process, so
+# `dowser` on PATH can fail with ModuleNotFoundError even though pip reports
+# the package as installed. PYTHONPATH leaves nothing to interpret.
+#
+#   ./dowse live
+#   ./dowse code D0EF 151 --bank 1
+#
+DIR=$(cd "$(dirname "$0")" && pwd)
+PYTHONPATH="$DIR/src" exec "$DIR/.venv/bin/python" -m dowser.cli "$@"

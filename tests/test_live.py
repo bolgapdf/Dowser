@@ -46,6 +46,7 @@ class FakeCartridge:
     def __init__(self, payload: bytes | None = None, title: str = "POKEMON SILVER") -> None:
         self.payload = payload if payload is not None else state_bytes()
         self.title = title
+        self.frozen: list[str] = []
         self.socket = socket.socket()
         self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.socket.bind(("127.0.0.1", 0))
@@ -55,11 +56,17 @@ class FakeCartridge:
         self.thread.start()
 
     def _serve(self) -> None:
-        try:
-            connection, _ = self.socket.accept()
-        except OSError:
-            return
+        # Serves connections one after another rather than just one: the web
+        # server opens a fresh connection per request, so a single-shot fake
+        # made every request after the first look like a dead emulator.
+        while True:
+            try:
+                connection, _ = self.socket.accept()
+            except OSError:
+                return
+            self._handle(connection)
 
+    def _handle(self, connection) -> None:
         with connection:
             buffer = b""
             while True:
@@ -82,6 +89,14 @@ class FakeCartridge:
                     elif command == "SNAP":
                         connection.sendall(f"OK {len(self.payload)}\n".encode())
                         connection.sendall(self.payload)
+                    elif command.startswith("FREEZE"):
+                        self.frozen.append(command)
+                        connection.sendall(f"OK {len(self.frozen)}\n".encode())
+                    elif command == "CLEAR":
+                        self.frozen.clear()
+                        connection.sendall(b"OK 0\n")
+                    elif command == "HELD":
+                        connection.sendall(b"OK\n")
                     elif command == "BYE":
                         connection.sendall(b"OK\n")
                         return
@@ -133,8 +148,7 @@ def test_a_closed_port_explains_how_to_open_it():
 
 def test_a_server_that_hangs_up_mid_reply():
     class Truncating(FakeCartridge):
-        def _serve(self):
-            connection, _ = self.socket.accept()
+        def _handle(self, connection):
             with connection:
                 connection.recv(4096)
                 connection.sendall(b"OK 999999\n")  # promises far more than it sends

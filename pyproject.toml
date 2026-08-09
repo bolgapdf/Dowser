@@ -13,13 +13,15 @@ authors = [{ name = "Jacob Silva" }]
 dependencies = ["numpy>=1.26"]
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "ruff>=0.6"]
+dev = ["pytest>=8", "ruff>=0.6", "httpx>=0.27"]
+web = ["fastapi>=0.115", "uvicorn[standard]>=0.30"]
 
 [project.scripts]
 dowser = "dowser.cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/dowser"]
+artifacts = ["src/dowser/static/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

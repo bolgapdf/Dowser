@@ -22,6 +22,19 @@ $ dowser code D123 255
 01FF23D1
 ```
 
+## In a browser
+
+```sh
+./dowse web
+```
+
+Opens at `http://127.0.0.1:8585`. Type the number you can see, press a button for what happened to
+it, and hold any candidate with the button next to it. It's the same search as the terminal, minus
+having to remember that `<` means decreased.
+
+Python serves it; the page is plain HTML and talks to a small JSON API, which in turn talks to
+Cartridge over the loopback socket. Everything stays on your machine.
+
 ## Live search
 
 There is a full worked example in [docs/mew.md](docs/mew.md): finding the address that decides
@@ -139,11 +152,17 @@ targets the wrong bank is worse than one that admits it can't say.
 
 ```sh
 python -m venv .venv && . .venv/bin/activate
-pip install -e ".[dev]"
+pip install -e ".[dev,web]"
 pytest
 ```
 
-Requires Python 3.11+ and NumPy.
+Requires Python 3.11+ and NumPy. The browser interface additionally needs FastAPI and uvicorn,
+which is what the `web` extra installs.
+
+There is also a `./dowse` script that runs everything straight from the source tree with
+`PYTHONPATH`, for when an editable install's `.pth` file isn't picked up — which happens, and is
+maddening to diagnose from a `ModuleNotFoundError` that insists the package isn't installed when
+pip says it is.
 
 ## Reading save states
 

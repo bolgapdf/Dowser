@@ -185,7 +185,7 @@ LIVE_HELP = """\
   >47       greater than 47
 
   list      show candidates            code [value]  write a code
-  freeze N  hold the found address at N (applies it in the emulator)
+  freeze N [addr]   hold candidates at N in the emulator (one, if named)
   thaw      release everything         reset  start over        quit
 """
 
@@ -294,29 +294,49 @@ def cmd_live(args: argparse.Namespace) -> int:
     return 0
 
 
+# Freezing more than this at once stops being an experiment and starts being a
+# way to corrupt a save, since every extra address is one more place the game
+# didn't expect to change.
+MAX_FREEZE = 8
+
+
 def _live_freeze(session: scan.ScanSession, connection, line: str) -> None:
-    """Apply the found address in the emulator, without leaving the prompt."""
+    """Hold the found address (or addresses) in the running emulator.
+
+        freeze 16          every surviving candidate
+        freeze 16 D0EF     just that one, for bisecting
+
+    Freezing the whole set at once answers "is any of these the real one" in a
+    single walk through the grass. Several addresses hold the same value and
+    only one of them usually drives anything, so the fast path is to confirm the
+    set works and then halve it.
+    """
     parts = line.split()
-    if len(parts) != 2 or not parts[1].isdigit():
-        print("  usage: freeze <value>")
+    if len(parts) not in (2, 3) or not parts[1].isdigit():
+        print("  usage: freeze <value> [address]")
         return
 
-    found = session.candidates(limit=6)
+    value = int(parts[1])
+    found = session.candidates(limit=MAX_FREEZE + 1)
+
     if not found:
         print("  nothing found yet")
         return
-    if len(found) > 5:
-        print(f"  {session.remaining} candidates; narrow below 6 first")
+
+    if len(parts) == 3:
+        wanted = parts[2].lstrip("$").removeprefix("0x").upper()
+        found = [c for c in found if f"{c.address:04X}" == wanted]
+        if not found:
+            print(f"  ${wanted} isn't one of the candidates")
+            return
+
+    if len(found) > MAX_FREEZE:
+        print(f"  {session.remaining} candidates; narrow to {MAX_FREEZE} or fewer first")
         return
 
-    # Freezing all the survivors at once is the fast way to find out which of
-    # them the game actually reads: several addresses hold the same value, and
-    # only one of them drives anything.
     for candidate in found:
-        connection.freeze(candidate.address, int(parts[1]), bank=candidate.bank)
-        print(
-            f"  holding {candidate.region}:{candidate.bank} ${candidate.address:04X} = {parts[1]}"
-        )
+        connection.freeze(candidate.address, value, bank=candidate.bank)
+        print(f"  holding {candidate.region}:{candidate.bank} ${candidate.address:04X} = {value}")
     print("  `thaw` to release")
 
 
@@ -339,6 +359,26 @@ def _live_code(session: scan.ScanSession, line: str) -> None:
             print(f"  {code}")
     except ValueError as error:
         print(f"  {error}")
+
+
+def cmd_web(args: argparse.Namespace) -> int:
+    try:
+        from .web import serve
+    except ImportError as error:
+        raise SystemExit("the browser interface needs FastAPI: pip install -e '.[web]'") from error
+
+    url = f"http://127.0.0.1:{args.port}"
+    print(f"Dowser is at {url}   (ctrl-C to stop)")
+
+    if not args.no_open:
+        import threading
+        import webbrowser
+
+        # After a beat, so the server is answering by the time the tab opens.
+        threading.Timer(0.6, lambda: webbrowser.open(url)).start()
+
+    serve(port=args.port, emulator_port=args.emulator_port)
+    return 0
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -378,6 +418,12 @@ def build_parser() -> argparse.ArgumentParser:
     live.add_argument("--port", type=int, default=8484)
     live.add_argument("--limit", type=int, default=50)
     live.set_defaults(func=cmd_live)
+
+    web = subparsers.add_parser("web", help="open the search in a browser")
+    web.add_argument("--port", type=int, default=8585)
+    web.add_argument("--emulator-port", type=int, default=8484)
+    web.add_argument("--no-open", action="store_true", help="don't launch a browser")
+    web.set_defaults(func=cmd_web)
 
     code = subparsers.add_parser("code", help="write a code for an address")
     code.add_argument("address", help="hex, with or without $ or 0x")
