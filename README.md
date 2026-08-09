@@ -147,10 +147,17 @@ Requires Python 3.11+ and NumPy.
 
 ## Reading save states
 
-Cartridge writes a zlib-compressed binary property list. Python reads it without knowing anything
-about Swift: `PropertyListEncoder` stores `Data` as bytes and `Codable` names the keys after the
-properties, so `workRAM` in the emulator is `workRAM` in the file. Uncompressed states load too,
-since Cartridge falls back to writing those when zlib fails.
+Cartridge writes a compressed binary property list. Python reads it without knowing anything about
+Swift: `PropertyListEncoder` stores `Data` as bytes and `Codable` names the keys after the
+properties, so `workRAM` in the emulator is `workRAM` in the file.
+
+One trap, which cost me an hour. `NSData.compressed(using: .zlib)` does **not** write zlib — it
+writes a raw DEFLATE stream with no header and no trailing checksum, so `zlib.decompress` rejects
+every real save state outright. You need `zlib.decompress(data, -zlib.MAX_WBITS)`.
+
+The tests didn't catch it, because the fake states were built with `zlib.compress()` and were
+therefore in a format Cartridge never produces. A fixture that's easy to write is not the same as
+a fixture that's right, and only running against the actual emulator showed the difference.
 
 ## Library
 
