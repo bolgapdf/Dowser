@@ -1,0 +1,47 @@
+
+  DOWSER — finding Mew in Pokémon Silver
+
+  Cartridge is running with Silver loaded and the scan port open on 8484.
+
+  1.  Walk into tall grass.
+
+  2.  Start the search:        dowser live
+
+  3.  A wild Pokémon appears — type its Pokédex number and press return:
+
+          Rattata   19        Hoothoot  163
+          Sentret  161        Geodude    74
+          Pidgey    16        Zubat      41
+          Caterpie  10        Bellsprout 69
+
+  4.  Run away. Find a DIFFERENT species. Type that number.
+      Two rounds usually gets you from ~200 candidates down to a handful.
+
+  5.  Check which one is real before reaching for Mew. Pick a candidate and:
+
+          dowser code D0EF 16 --bank 1     (use YOUR address, not this one)
+
+      Enter that code in Cartridge, walk into grass.
+      Every encounter a Pidgey?  That's the address.
+      Nothing changes?           Try the next candidate.
+
+  6.  Same address, value 151. Walk into the grass. That's Mew.
+
+  ---
+
+  In the live prompt:
+
+      47      it is 47 now          <    it went down
+      -12     it went down by 12    >    it went up
+      +100    it went up by 100     =    it did not change
+      <47     less than 47          !    it changed
+
+      list    show candidates       code 151    write the code
+      reset   start over            quit        stop
+      ?       help
+
+  ---
+
+  Save state before you start. Turn codes off before you save the game.
+  Full guide:   open docs/mew.md
+

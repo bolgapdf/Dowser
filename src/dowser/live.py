@@ -147,6 +147,24 @@ class Live:
             work_ram_bank=int(plist.get("workRAMBank", 1)),
         )
 
+    def freeze(self, address: int, value: int, *, bank: int = 0) -> int:
+        """Hold `address` at `value`, rewritten once per frame.
+
+        Once per frame is what the cheat hardware did, and the difference
+        matters: a value the game recomputes constantly will visibly flicker,
+        while one read shortly after a frame boundary takes reliably.
+        """
+        self._send(f"FREEZE {address:04X} {bank} {value}")
+        return int(self._expect_ok(self._read_line()) or 0)
+
+    def clear(self) -> None:
+        self._send("CLEAR")
+        self._expect_ok(self._read_line())
+
+    def held(self) -> list[str]:
+        self._send("HELD")
+        return self._expect_ok(self._read_line()).split()
+
     def address_space(self) -> AddressSpace:
         snapshot = self.snapshot()
         return build_address_space(

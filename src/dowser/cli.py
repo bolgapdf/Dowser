@@ -185,7 +185,8 @@ LIVE_HELP = """\
   >47       greater than 47
 
   list      show candidates            code [value]  write a code
-  reset     start over                 quit
+  freeze N  hold the found address at N (applies it in the emulator)
+  thaw      release everything         reset  start over        quit
 """
 
 
@@ -255,6 +256,13 @@ def cmd_live(args: argparse.Namespace) -> int:
             if lowered.startswith("code"):
                 _live_code(session, line)
                 continue
+            if lowered in ("thaw", "clear"):
+                connection.clear()
+                print("  released")
+                continue
+            if lowered.startswith("freeze"):
+                _live_freeze(session, connection, line)
+                continue
 
             try:
                 filter_ = _live_filter(line)
@@ -284,6 +292,32 @@ def cmd_live(args: argparse.Namespace) -> int:
         connection.close()
 
     return 0
+
+
+def _live_freeze(session: scan.ScanSession, connection, line: str) -> None:
+    """Apply the found address in the emulator, without leaving the prompt."""
+    parts = line.split()
+    if len(parts) != 2 or not parts[1].isdigit():
+        print("  usage: freeze <value>")
+        return
+
+    found = session.candidates(limit=6)
+    if not found:
+        print("  nothing found yet")
+        return
+    if len(found) > 5:
+        print(f"  {session.remaining} candidates; narrow below 6 first")
+        return
+
+    # Freezing all the survivors at once is the fast way to find out which of
+    # them the game actually reads: several addresses hold the same value, and
+    # only one of them drives anything.
+    for candidate in found:
+        connection.freeze(candidate.address, int(parts[1]), bank=candidate.bank)
+        print(
+            f"  holding {candidate.region}:{candidate.bank} ${candidate.address:04X} = {parts[1]}"
+        )
+    print("  `thaw` to release")
 
 
 def _live_code(session: scan.ScanSession, line: str) -> None:
