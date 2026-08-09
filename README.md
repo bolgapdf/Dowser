@@ -24,6 +24,9 @@ $ dowser code D123 255
 
 ## Live search
 
+There is a full worked example in [docs/mew.md](docs/mew.md): finding the address that decides
+your next wild encounter in Pokémon Silver, and catching a Mew with it.
+
 Save files work, but a round costs you a pause, a save, and a filename. Switch on
 **Settings › Advanced › Cheat Search** in Cartridge and search the running game instead:
 
