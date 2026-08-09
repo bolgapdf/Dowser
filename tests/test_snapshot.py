@@ -12,6 +12,16 @@ from dowser import load, load_all
 from dowser.snapshot import NotASaveState
 
 
+def apple_compress(payload: bytes) -> bytes:
+    """What NSData.compressed(using: .zlib) writes: raw DEFLATE, no header.
+
+    The fakes used zlib.compress() at first, which meant the suite happily
+    validated a format Cartridge never produces.
+    """
+    deflate = zlib.compressobj(9, zlib.DEFLATED, -zlib.MAX_WBITS)
+    return deflate.compress(payload) + deflate.flush()
+
+
 def write_state(
     path: Path,
     *,
@@ -35,7 +45,7 @@ def write_state(
         },
         fmt=plistlib.FMT_BINARY,
     )
-    path.write_bytes(zlib.compress(plist) if compress else plist)
+    path.write_bytes(apple_compress(plist) if compress else plist)
     return path
 
 
@@ -80,6 +90,17 @@ def test_a_file_that_is_not_a_state(tmp_path):
 
 def test_a_plist_missing_the_ram_keys(tmp_path):
     path = tmp_path / "partial.state"
-    path.write_bytes(zlib.compress(plistlib.dumps({"title": "X"}, fmt=plistlib.FMT_BINARY)))
+    path.write_bytes(apple_compress(plistlib.dumps({"title": "X"}, fmt=plistlib.FMT_BINARY)))
     with pytest.raises(NotASaveState, match="highRAM|workRAM"):
         load(path)
+
+
+def test_a_zlib_wrapped_state_still_loads(tmp_path):
+    """The fallback path, in case a state was ever written the other way."""
+    plist = plistlib.dumps(
+        {"title": "X", "workRAM": bytes(0x2000), "highRAM": bytes(0x7F), "mapper": {}},
+        fmt=plistlib.FMT_BINARY,
+    )
+    path = tmp_path / "wrapped.state"
+    path.write_bytes(zlib.compress(plist))
+    assert load(path).title == "X"

@@ -12,6 +12,7 @@ there and refuses to say exactly where.
 """
 
 from .codes import Code, encode, parse
+from .live import Live, NotConnected, connect
 from .memory import AddressSpace, Region, build_address_space
 from .scan import (
     Candidate,
@@ -39,6 +40,8 @@ __all__ = [
     "Candidate",
     "Code",
     "Filter",
+    "Live",
+    "NotConnected",
     "NeedsPrevious",
     "NotASaveState",
     "Region",
@@ -47,6 +50,7 @@ __all__ = [
     "between",
     "build_address_space",
     "changed",
+    "connect",
     "decreased",
     "decreased_by",
     "encode",

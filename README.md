@@ -22,6 +22,40 @@ $ dowser code D123 255
 01FF23D1
 ```
 
+## Live search
+
+Save files work, but a round costs you a pause, a save, and a filename. Switch on
+**Settings › Advanced › Cheat Search** in Cartridge and search the running game instead:
+
+```
+$ dowser live
+connected to POKEMON SILVER at 127.0.0.1:8484
+8-bit search. `?` for help, `quit` to stop.
+
+[-] 47              the value is 47 right now
+  equals 47: 139 candidates
+[139] <             took a hit
+  decreased: 10 candidates
+[10] 31             it reads 31
+  equals 31: 1 candidate
+    wram:1 $D123 = 31
+[1] code 255
+  01FF23D1
+```
+
+Each line takes a snapshot at the moment you press return, which is the point — the value is
+whatever it is *now*, not whatever it was when you last remembered to save.
+
+| | | | |
+|---|---|---|---|
+| `47` | is 47 now | `<` | went down |
+| `-12` | went down by 12 | `>` | went up |
+| `+100` | went up by 100 | `=` | didn't change |
+| `<47` | less than 47 | `!` | changed |
+
+The port is loopback-only and off unless you switch it on. It's a debugging port into a running
+program, so opening one should be deliberate.
+
 ## How it narrows
 
 Each round asks one true thing about the value and discards every address that disagrees. The

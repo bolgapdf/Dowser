@@ -48,11 +48,33 @@ class Snapshot:
         )
 
 
+def _decompressed(data: bytes) -> bytes:
+    """Undo whatever Cartridge did to shrink the state.
+
+    `NSData.compressed(using: .zlib)` is misleadingly named: it writes a raw
+    DEFLATE stream with no zlib header and no trailing checksum, so
+    `zlib.decompress` rejects it outright. That is the format essentially every
+    real save state is in — the other two cases exist only as fallbacks.
+    """
+    attempts = (
+        lambda payload: zlib.decompress(payload, -zlib.MAX_WBITS),  # Apple's raw DEFLATE
+        zlib.decompress,  # a genuinely zlib-wrapped stream
+        lambda payload: payload,  # written uncompressed, which Cartridge also accepts
+    )
+
+    for attempt in attempts:
+        try:
+            candidate = attempt(data)
+        except zlib.error:
+            continue
+        if candidate[:6] == b"bplist" or candidate.lstrip()[:5] == b"<?xml":
+            return candidate
+
+    raise NotASaveState("not a property list, compressed or otherwise")
+
+
 def _plist_from(data: bytes) -> dict:
-    try:
-        raw = zlib.decompress(data)
-    except zlib.error:
-        raw = data  # Written before compression, or written when zlib failed.
+    raw = _decompressed(data)
 
     try:
         plist = plistlib.loads(raw)
