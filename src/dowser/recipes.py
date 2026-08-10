@@ -43,6 +43,9 @@ class Recipe:
     apply_hint: str = ""
     #: Honest warning where one is owed.
     caution: str = ""
+    #: True when applying this cheat destroys the variation the search needs,
+    #: so the address has to be remembered or it is gone for this save.
+    self_erasing: bool = False
     tags: list[str] = field(default_factory=list)
 
 
@@ -60,8 +63,8 @@ ASK = {
 RECIPES: list[Recipe] = [
     Recipe(
         id="wild-species",
-        name="Wild encounter species",
-        blurb="Decide what appears in the grass. This is the Mew one.",
+        name="Choose which Pokémon appears",
+        blurb="Force every wild encounter to be one species. This is the Mew one.",
         width="u8",
         applies="species",
         tags=["encounters"],
@@ -89,11 +92,12 @@ RECIPES: list[Recipe] = [
             "Several addresses hold the species at once and only one drives the generator. "
             "Hold them all, walk into grass, and see whether it took."
         ),
+        self_erasing=True,
     ),
     Recipe(
         id="encounter-level",
-        name="Wild encounter level",
-        blurb="Set the level of whatever you meet.",
+        name="Set the level of wild Pokémon",
+        blurb="Every wild Pokémon you meet appears at the level you choose.",
         width="u8",
         tags=["encounters"],
         steps=[
@@ -102,11 +106,12 @@ RECIPES: list[Recipe] = [
             Step("And once more.", "equals", "number"),
         ],
         caution="Very high levels can give a Pokémon moves the game doesn't expect. 100 is safe.",
+        self_erasing=True,
     ),
     Recipe(
         id="money",
-        name="Money",
-        blurb="The ¥ figure in your trainer card.",
+        name="Set your money",
+        blurb="Change the ¥ on your trainer card to anything up to 999,999.",
         width="bcd3",
         tags=["resources"],
         steps=[
@@ -118,8 +123,8 @@ RECIPES: list[Recipe] = [
     ),
     Recipe(
         id="item-quantity",
-        name="Item quantity",
-        blurb="How many of something you're carrying.",
+        name="Set how many of an item you have",
+        blurb="Pick a bag slot and hold its count at 99, so it never runs out.",
         width="u8",
         tags=["items"],
         steps=[
@@ -136,8 +141,8 @@ RECIPES: list[Recipe] = [
     ),
     Recipe(
         id="item-slot",
-        name="Item slot",
-        blurb="Turn one item in your bag into another. This is how you get a Master Ball.",
+        name="Turn a bag item into another item",
+        blurb="Change what an item in your bag actually is. This is how you get Master Balls.",
         width="u8",
         applies="item",
         tags=["items"],
@@ -161,8 +166,8 @@ RECIPES: list[Recipe] = [
     ),
     Recipe(
         id="pp",
-        name="Move PP",
-        blurb="Stop a move running out.",
+        name="Stop a move running out of PP",
+        blurb="Hold one move's PP full so you can use it forever.",
         width="u8",
         tags=["battle"],
         steps=[
@@ -173,8 +178,8 @@ RECIPES: list[Recipe] = [
     ),
     Recipe(
         id="stats",
-        name="A Pokémon's stat",
-        blurb="Attack, Defence, Speed, or max HP.",
+        name="Change a Pokémon's stats",
+        blurb="Set Attack, Defence, Speed or max HP on the Pokémon in your party.",
         width="u16be",
         tags=["party"],
         steps=[
@@ -190,8 +195,8 @@ RECIPES: list[Recipe] = [
     ),
     Recipe(
         id="experience",
-        name="Experience",
-        blurb="Set experience just under a level-up.",
+        name="Set a Pokémon's experience",
+        blurb="Put a Pokémon just under a level-up, or a long way past one.",
         width="u24be",
         tags=["party"],
         steps=[
@@ -203,8 +208,8 @@ RECIPES: list[Recipe] = [
     ),
     Recipe(
         id="steps",
-        name="Steps until the next encounter",
-        blurb="Freeze it high for no wild battles, or low for one every step.",
+        name="Turn wild battles off (or on)",
+        blurb="Walk through grass undisturbed, or trigger an encounter on every single step.",
         width="u8",
         tags=["encounters"],
         steps=[
@@ -217,8 +222,8 @@ RECIPES: list[Recipe] = [
     ),
     Recipe(
         id="catch-rate",
-        name="Catch rate",
-        blurb="The hidden number behind whether a Ball holds.",
+        name="Make anything easy to catch",
+        blurb="Hold the hidden catch value at maximum so almost any Ball works.",
         width="u8",
         tags=["battle"],
         steps=[
@@ -236,8 +241,8 @@ RECIPES: list[Recipe] = [
     ),
     Recipe(
         id="shiny",
-        name="Shiny encounter",
-        blurb="The DVs that decide whether a Pokémon sparkles.",
+        name="Make wild Pokémon shiny",
+        blurb="Force the hidden values that decide whether a wild Pokémon sparkles.",
         width="u16be",
         tags=["encounters"],
         steps=[

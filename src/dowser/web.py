@@ -20,7 +20,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
-from . import gen2, recipes, scan
+from . import gen2, recipes, saved, scan
 from .live import Live, NotConnected
 from .widths import WIDTHS, resolve
 
@@ -72,6 +72,11 @@ class Search:
         #: The bytes the last step measured, to notice a frozen emulator.
         self.last_bytes = None
         self.stale = False
+        #: Addresses found in earlier sessions, per game.
+        self.library = saved.Library()
+        #: What is currently held, per recipe, so one can be released alone.
+        self.active: dict[str, dict] = {}
+        self.game = ""
 
     def connection(self) -> Live:
         """A fresh connection per request.
@@ -146,6 +151,9 @@ def _recipe_state() -> dict | None:
         "caution": recipe.caution,
         "width": recipe.width,
         "maximum": resolve(recipe.width).maximum,
+        "selfErasing": recipe.self_erasing,
+        "remembered": _remembered(recipe.id),
+        "held": search.active.get(recipe.id),
         "stepNumber": search.step + 1,
         "stepCount": len(recipe.steps),
         "done": done,
@@ -171,6 +179,9 @@ def _state(extra: dict | None = None) -> dict:
         ],
         "candidates": _candidates() if 0 < search.session.remaining <= 200 else [],
         "frozen": search.frozen,
+        "game": search.game,
+        "active": search.active,
+        "knownIds": sorted(search.library.for_game(search.game)),
     }
     payload.update(extra or {})
     return payload
@@ -183,6 +194,9 @@ def status() -> dict:
         with Live(search.host, search.port, timeout=2.0) as live:
             title = live.title()
             running = live.running()
+        if title and title != search.game:
+            # A different cartridge means a different set of addresses.
+            search.game = title
         return _state({"connected": True, "title": title, "running": running})
     except (NotConnected, HTTPException):
         return _state({"connected": False, "title": None, "running": None})
@@ -213,7 +227,9 @@ def start_recipe(recipe_id: str) -> dict:
 
     search.reset(recipe.width)
     search.recipe = recipe
-    search.step = 0
+    # Already found on this cartridge? Then there is nothing to search for, and
+    # for the one-shot cheats there would be no way to search again anyway.
+    search.step = len(recipe.steps) if search.library.get(search.game, recipe.id) else 0
     return _state()
 
 
@@ -388,6 +404,77 @@ def run_scan(body: ScanRequest) -> dict:
     return _state()
 
 
+def _push_cheats() -> None:
+    """Send the whole active set, replacing whatever Cartridge was holding.
+
+    The emulator holds a flat list with no idea which cheat owns what, so the
+    authority lives here and the full set is rewritten on every change. That is
+    what makes "release just this one" possible without a per-address protocol.
+    """
+    live = search.connection()
+    try:
+        live.clear()
+        for entry in search.active.values():
+            for spot in entry["addresses"]:
+                live.freeze(spot["address"], entry["value"], bank=spot["bank"])
+    finally:
+        live.close()
+
+
+def _remembered(recipe_id: str) -> list[dict]:
+    return [
+        {"address": f.address, "hex": f.hex, "bank": f.bank, "value": f.value}
+        for f in search.library.get(search.game, recipe_id)
+    ]
+
+
+@app.post("/api/recipes/{recipe_id}/apply")
+def apply_recipe(recipe_id: str, body: FreezeRequest) -> dict:
+    """Hold a recipe's remembered addresses at a value.
+
+    This is the path that makes a found address worth keeping: no search, no
+    steps, just pick a different Pokémon and press the button.
+    """
+    recipe = recipes.BY_ID.get(recipe_id)
+    if recipe is None:
+        raise HTTPException(status_code=404, detail=f"no recipe {recipe_id!r}")
+
+    spots = _remembered(recipe_id)
+    if body.address is not None:
+        spots = [s for s in spots if s["address"] == body.address]
+    if not spots:
+        raise HTTPException(status_code=400, detail="nothing remembered for this one yet")
+
+    maximum = resolve(recipe.width).maximum
+    if not 0 <= body.value <= maximum:
+        raise HTTPException(status_code=400, detail=f"value must be between 0 and {maximum}")
+
+    search.active[recipe_id] = {"value": body.value, "addresses": spots}
+    _push_cheats()
+    return _state()
+
+
+@app.post("/api/recipes/{recipe_id}/release")
+def release_recipe(recipe_id: str) -> dict:
+    """Stop holding this one, leaving any others alone."""
+    search.active.pop(recipe_id, None)
+    _push_cheats()
+    return _state()
+
+
+@app.post("/api/recipes/{recipe_id}/forget")
+def forget_recipe(recipe_id: str) -> dict:
+    """Throw away the remembered address so the search can be run again."""
+    search.active.pop(recipe_id, None)
+    search.library.forget(search.game, recipe_id)
+    _push_cheats()
+    if search.recipe and search.recipe.id == recipe_id:
+        search.reset(search.recipe.width)
+        search.recipe = recipes.BY_ID[recipe_id]
+        search.step = 0
+    return _state()
+
+
 @app.post("/api/freeze")
 def freeze(body: FreezeRequest) -> dict:
     found = search.session.candidates(limit=64)
@@ -398,19 +485,26 @@ def freeze(body: FreezeRequest) -> dict:
     if len(found) > 8:
         raise HTTPException(status_code=400, detail="narrow to 8 or fewer first")
 
-    live = search.connection()
-    try:
-        for candidate in found:
-            live.freeze(candidate.address, body.value, bank=candidate.bank)
-    except NotConnected as error:
-        raise HTTPException(status_code=503, detail=str(error)) from error
-    finally:
-        live.close()
-
     search.frozen = [
         {"address": c.address, "hex": f"{c.address:04X}", "bank": c.bank, "value": body.value}
         for c in found
     ]
+
+    # Remember it. Some searches destroy their own preconditions — hold the
+    # encounter species at Mew and every encounter is Mew, so there is no
+    # variation left to narrow with, ever again on this save.
+    if search.recipe is not None:
+        search.library.remember(
+            search.game,
+            search.recipe.id,
+            [
+                saved.Found(
+                    address=c.address, bank=c.bank, width=search.session.width, value=c.value
+                )
+                for c in found
+            ],
+        )
+        search.active[search.recipe.id] = {"value": body.value, "addresses": search.frozen}
     return _state()
 
 

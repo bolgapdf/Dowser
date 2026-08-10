@@ -32,6 +32,10 @@
           transition:border-color .15s ease, background .15s ease, transform .15s ease; }
   .card:hover { border-color:var(--line-strong); background:#171b19; transform:translateY(-1px); }
   .card b { display:block; font-size:15px; font-weight:600; margin-bottom:3px; }
+  .tag { float:right; font-style:normal; font-size:9.5px; letter-spacing:.09em;
+         text-transform:uppercase; font-weight:600; color:var(--faint);
+         border:.5px solid var(--line-strong); border-radius:20px; padding:2px 7px; }
+  .tag.on { color:var(--warn); border-color:rgba(217,138,75,.45); }
   .card span { color:var(--faint); font-size:12.5px; line-height:1.45; display:block; }
 
   .panel { background:var(--panel); border:.5px solid var(--line); border-radius:12px;
@@ -142,6 +146,24 @@
       <div class="msg" id="msg"></div>
     </div>
 
+    <!-- Already known -->
+    <div class="panel hidden" id="known">
+      <p class="eyebrow">Found earlier on this cartridge</p>
+      <p class="prompt" id="knownAddr"></p>
+      <p class="hint" id="knownHeld"></p>
+      <div class="row">
+        <div class="picker hidden" id="picker3">
+          <input type="text" id="pick3" placeholder="type a name…" autocomplete="off" />
+          <div class="options hidden" id="options3"></div>
+        </div>
+        <input type="number" id="num3" class="hidden" placeholder="0" />
+        <button class="primary" id="applyKnown">Hold it there</button>
+        <button class="warnbtn" id="releaseOne">Release this cheat</button>
+        <button class="ghost" id="forget">Search again</button>
+      </div>
+      <p class="note hidden" id="knownHint"></p>
+    </div>
+
     <!-- Apply -->
     <div class="panel hidden" id="apply">
       <p class="eyebrow">Set it to</p>
@@ -226,12 +248,24 @@ function wirePicker(inputId, boxId, onPick) {
 const picker1 = wirePicker("pick", "options", (n) => { pending = n; });
 let applyValue = null;
 const picker2 = wirePicker("pick2", "options2", (n) => { applyValue = n; });
+let knownValue = null;
+const picker3 = wirePicker("pick3", "options3", (n) => { knownValue = n; });
 
 /* ---- menu ---- */
 async function loadMenu() {
   recipes = (await (await fetch("/api/recipes")).json()).recipes;
-  $("cards").innerHTML = recipes.map((r) =>
-    `<button class="card" data-id="${r.id}"><b>${r.name}</b><span>${r.blurb}</span></button>`).join("");
+  drawCards();
+}
+
+function drawCards() {
+  const known = S.knownIds || [];
+  const held = Object.keys(S.active || {});
+  $("cards").innerHTML = recipes.map((r) => {
+    const tag = held.includes(r.id) ? `<em class="tag on">holding</em>`
+              : known.includes(r.id) ? `<em class="tag">found</em>` : "";
+    return `<button class="card" data-id="${r.id}"><b>${r.name}${tag}</b>
+            <span>${r.blurb}</span></button>`;
+  }).join("");
 }
 $("cards").addEventListener("click", async (e) => {
   const card = e.target.closest("button[data-id]");
@@ -279,6 +313,30 @@ async function hold(address) {
   catch (err) { say(err.message); }
 }
 $("hold").addEventListener("click", () => hold(null));
+
+$("applyKnown").addEventListener("click", async () => {
+  const r = S.recipe;
+  const named = r.applies === "species" || r.applies === "item";
+  const value = named ? knownValue : parseInt($("num3").value, 10);
+  if (value === null || Number.isNaN(value)) return say("Choose what to set it to.");
+  try { say(""); render(await call(`/api/recipes/${r.id}/apply`, { value })); }
+  catch (err) { say(err.message); }
+});
+
+$("releaseOne").addEventListener("click", async () => {
+  try { render(await call(`/api/recipes/${S.recipe.id}/release`, {})); say(""); }
+  catch (err) { say(err.message); }
+});
+
+$("forget").addEventListener("click", async () => {
+  const r = S.recipe;
+  if (r.selfErasing && !confirm(
+      "This cheat erases what the search needs. If it's currently holding a value, "
+      + "release it and let the game run normally first, or the search won't narrow.\n\n"
+      + "Forget the saved address and search again?")) return;
+  try { render(await call(`/api/recipes/${r.id}/forget`, {})); say(""); }
+  catch (err) { say(err.message); }
+});
 $("release").addEventListener("click", async () => {
   try { render(await call("/api/thaw", {})); } catch (err) { say(err.message); }
 });
@@ -299,6 +357,7 @@ function render(next) {
   $("title").textContent = S.connected ? (S.title || "") : "";
 
   const r = S.recipe;
+  if (!r && recipes.length) drawCards();
   $("menu").classList.toggle("hidden", !!r);
   $("run").classList.toggle("hidden", !r);
   if (!r) return;
@@ -306,7 +365,25 @@ function render(next) {
   $("pips").innerHTML = Array.from({ length: r.stepCount }, (_, i) =>
     `<span class="pip ${i < r.stepNumber - 1 || r.done ? "done" : ""}"></span>`).join("");
 
-  const answering = !r.done && r.step;
+  const remembered = (r.remembered || []);
+  const knowIt = remembered.length > 0;
+
+  $("known").classList.toggle("hidden", !knowIt);
+  if (knowIt) {
+    $("knownAddr").textContent = remembered
+      .map((f) => `$${f.hex}`).join(", ") + (remembered.length > 1 ? "  (all held together)" : "");
+    $("knownHeld").textContent = r.held
+      ? `Currently holding at ${r.held.value}.`
+      : "Not currently held.";
+    const named = r.applies === "species" || r.applies === "item";
+    $("picker3").classList.toggle("hidden", !named);
+    $("num3").classList.toggle("hidden", named);
+    if (named && picker3._kind !== r.applies) { picker3.setKind(r.applies); picker3._kind = r.applies; }
+    $("knownHint").classList.toggle("hidden", !r.applyHint);
+    $("knownHint").textContent = r.applyHint || "";
+  }
+
+  const answering = !r.done && r.step && !knowIt;
   $("answerRow").classList.toggle("hidden", !answering);
   $("stepLabel").textContent = r.done ? r.name
     : `${r.name} · step ${r.stepNumber} of ${r.stepCount}`;
@@ -338,13 +415,14 @@ function render(next) {
       "possible addresses";
   }
 
-  $("stale").classList.toggle("hidden", !S.stale);
+  $("pips").parentElement.classList.toggle("hidden", knowIt);
+  $("stale").classList.toggle("hidden", !S.stale || knowIt);
   $("caution").classList.toggle("hidden", !r.caution);
   $("caution").className = "note caution" + (r.caution ? "" : " hidden");
   $("caution").textContent = r.caution || "";
 
   // Applying is offered once the set is small enough to be worth trying.
-  const ready = S.started && S.remaining > 0 && S.remaining <= 8;
+  const ready = !knowIt && S.started && S.remaining > 0 && S.remaining <= 8;
   $("apply").classList.toggle("hidden", !ready);
   if (ready) {
     const named = r.applies === "species" || r.applies === "item";
