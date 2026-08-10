@@ -1,79 +1,48 @@
 # Dowser
 
-**A point-and-click tool that finds a hidden number inside a running Game
-Boy game — your health, your money, whatever you're after — and lets you
-freeze it. No reverse-engineering knowledge required.**
+A memory-search tool for Game Boy and Game Boy Color games, paired with
+[Cartridge](https://github.com/bolgapdf/Cartridge), an emulator also
+built from scratch. It finds the address behind a number in a running
+game — health, money, whatever it is — and can hold it there while the
+game keeps playing.
 
-Pairs with **[Cartridge](https://github.com/bolgapdf/Cartridge)**, a Game
-Boy emulator I also built from scratch. Cartridge plays the game; Dowser
-looks inside its memory while it runs.
+## What it does
 
-## What it actually does
+- A guided web interface: pick a cheat from a menu, answer two or three
+  plain-language questions, and it narrows the address down on its own.
+  No memory addresses or hex values shown unless asked for.
+- Eleven built-in guided searches for Pokémon Gold, Silver, and Crystal —
+  choose which Pokémon appears, set money or item counts, change a
+  Pokémon's stats or experience, force a shiny encounter.
+- Remembers what it finds per cartridge, so a cheat can be reapplied
+  later with one click instead of searching again.
+- A terminal REPL and a Python library, for searching directly or against
+  save-state files instead of a running game.
 
-A game's memory is tens of thousands of individual numbers, and only one of
-them is, say, your health. This is the classic "Cheat Engine" technique for
-finding it: tell the tool what the number is right now, do something that
-changes it, tell it what it is now — and each answer throws out every
-number in memory that doesn't fit. Two or three rounds is usually enough to
-go from thirty thousand possibilities down to exactly one.
+## How it works
 
-The part I actually built is a guided version of this that doesn't require
-knowing that technique exists. Open the browser interface, pick "Set your
-money" from a menu, and it just asks:
+A search asks one true thing about a value at a time — is it 47, did it
+go down, did it stay the same — and discards every address in memory
+that disagrees. Two or three rounds is usually enough to go from tens of
+thousands of candidates to one. Different games store numbers
+differently — some values are byte-swapped, and Pokémon's money is
+stored as binary-coded decimal rather than as a plain integer — so the
+search engine reads memory according to a declared format rather than
+assuming one, and the guided recipes pick the right format automatically.
 
-> *How much money do you have? → Buy or sell something → How much now?*
-
-— in plain English, no hex addresses or memory jargon anywhere. Under the
-hood it's running the same narrowing search, handling details the user
-never has to think about (some numbers in these games are stored
-backwards, and some aren't stored as normal numbers at all — more on that
-below).
-
-## What's built in
-
-Eleven guided searches for Pokémon Gold, Silver, and Crystal, each just a
-short plain-English conversation:
-
-- Choose which Pokémon appears in the tall grass
-- Set your money, or any item's quantity
-- Turn a bag item into a completely different item
-- Stop a move from running out of PP
-- Change a Pokémon's stats, level, or experience
-- Force a wild Pokémon to be shiny
-
-Once found, an address is remembered — reopen the tool later and you can
-reapply the same cheat with one click, no searching again.
-
-## The interesting part
-
-The genuinely tricky bit isn't the search itself — it's that these old
-games don't store numbers the same way as each other. Some values are
-stored back-to-front. Money isn't stored as an ordinary number at all —
-it's stored the way a human reads it, digit by digit, which is a
-completely different bit pattern than the number itself. Searching for
-"9999" the normal way finds nothing, because on the byte level, "9999"
-isn't stored as 9999. Get the format wrong and the search doesn't error —
-it just silently finds nothing, which looks exactly like the number not
-being there. Handling that automatically, so a first-time user typing in
-"my money" just works, is most of what makes the guided version different
-from a raw search tool.
-
-There's also a live connection to Cartridge over the network: freezing a
-value doesn't just print a code to copy in by hand, it reaches into the
-running game immediately and holds it there while you keep playing.
+Freezing a value sends it to Cartridge over a local network connection
+and holds it there live, rather than producing a code to enter by hand.
 
 ## Proof it works
 
-**117 automated tests**, covering the search engine, the different number
-formats, and the live connection to Cartridge.
+117 automated tests cover the search engine, the number formats, and the
+live connection to Cartridge.
 
 ## Built with
 
-Python, FastAPI, NumPy for the search itself, and a small dependency-free
-web front end (plain HTML and JavaScript — no framework, on purpose, for a
-tool this size).
+Python, FastAPI, NumPy, and a dependency-free HTML/JavaScript front end.
 
-## Getting it running
+## Running it
 
 ```sh
 python -m venv .venv && . .venv/bin/activate
@@ -81,11 +50,10 @@ pip install -e ".[dev,web]"
 ./dowse web
 ```
 
-Opens a browser window at `127.0.0.1:8585`. Requires Cartridge to be
-running with **Settings › Advanced › Cheat Search** turned on. Everything
-stays on your own machine — the connection to Cartridge never leaves
-`127.0.0.1`.
+Opens a browser at `127.0.0.1:8585`. Requires Cartridge running with
+**Settings › Advanced › Cheat Search** turned on; the connection never
+leaves `127.0.0.1`.
 
-There's also a full worked walkthrough — finding a specific, normally
-unobtainable Pokémon and catching it — in [docs/mew.md](docs/mew.md).
+A full worked example — finding and catching a specific Pokémon that
+isn't normally available — is in [docs/mew.md](docs/mew.md).
 </content>
